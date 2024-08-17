@@ -1,48 +1,20 @@
+use std::env;
+
 use futures_util::{stream::StreamExt, SinkExt};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
-
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type", content = "payload")]
-enum ServerMessage {
-    #[serde(rename = "authenticated")]
-    Authenticated(Authenticated),
-
-    #[serde(rename = "action")]
-    Action(Action),
-
-    #[serde[rename = "request_move"]]
-    RequestMove(RequestMove),
-}
-
-#[derive(Deserialize, Debug)]
-struct Authenticated {
-    #[serde[rename = "sessionId"]]
-    session_id: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct Action {
-    #[serde[rename = "commands"]]
-    commands: Vec<String>,
-}
-
-#[derive(Deserialize, Debug)]
-struct RequestMove {
-    #[serde[rename = "gameState"]]
-    game_state: serde_json::Value,
-    #[serde[rename = "players"]]
-    players: serde_json::Value,
-}
+use ingvar::contract::{ ServerMessage, ResponseToServer };
 
 type WSSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 #[tokio::main]
 async fn main() {
     println!("Hello, world!");
+    let args: Vec<String> = env::args().collect();
+    let room_key = &args[1];
+    println!("{}", room_key);
     let token = std::env::var("TETRIS_TOKEN").expect("missing token");
-    let room_key = std::env::var("TETRIS_ROOM_KEY").expect("missing room key");
     let url = format!("wss://botrisbattle.com/ws?token={token}&roomKey={room_key}");
 
     let (mut ws_stream, _) = connect_async(url).await.expect("cannot connect");
@@ -86,34 +58,6 @@ async fn parse_server_message(ws_stream: &mut WSSocket, text: &str) {
             }
         },
         Err(e) => eprintln!("Failed to parse message: {}", e),
-    }
-}
-
-#[derive(Serialize, Debug)]
-struct ResponseToServerPayload {
-    commands: Vec<String>,
-}
-
-#[derive(Serialize, Debug)]
-struct ResponseToServer {
-    r#type: String,
-    payload: ResponseToServerPayload,
-}
-
-impl ResponseToServer {
-    fn empty() -> Self {
-        Self::new(vec![])
-    }
-
-    fn new(commands: Vec<String>) -> Self {
-        Self {
-            r#type: String::from("action"),
-            payload: ResponseToServerPayload { commands: commands },
-        }
-    }
-
-    fn add_command(&mut self, command: &str) {
-        self.payload.commands.push(String::from(command));
     }
 }
 
